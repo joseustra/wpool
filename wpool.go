@@ -1,79 +1,61 @@
 package wpool
 
-import "fmt"
+import "sync"
 
-var workerQueue chan chan Job
-var workQueue chan Job
-
-func init() {
-	workQueue = make(chan Job, 10)
-}
-
-// Job the function to be executed
+// Job is the definition of the task that will be executed
 type Job func() error
 
-// WPool Handle all background jobs
-type WPool struct {
-	Size int
+// Pool defines the pool
+type Pool struct {
+	concurrency int
+	queue       chan Job
 }
 
-// New start all workers and return WPool
-func New(size int) *WPool {
-	workerQueue = make(chan chan Job, size)
-	wp := &WPool{Size: size}
+var wg sync.WaitGroup
 
-	for i := 0; i < wp.Size; i++ {
-		w := newWorker(i+1, workerQueue)
+// New prepares the pool and workers
+func New(n int) *Pool {
+	pool := &Pool{
+		concurrency: n,
+		queue:       make(chan Job, 100),
+	}
+
+	for i := 0; i < n; i++ {
+		w := newWorker(i+1, pool.queue)
 		w.start()
 	}
 
-	go func() {
-		for {
-			select {
-			case work := <-workQueue:
-				go func() {
-					w := <-workerQueue
-					w <- work
-				}()
-			}
-		}
-	}()
-
-	fmt.Printf("[WPool] %v workers started\n", wp.Size)
-
-	return wp
+	return pool
 }
 
 // Add adds a new job to the queue
-func (wp *WPool) Add(job Job) {
-	workQueue <- job
+func (p *Pool) Add(j Job) error {
+	wg.Add(1)
+	p.queue <- j
+	return nil
+}
+
+// Wait will waits for all tasks to be done before continue
+func (p *Pool) Wait() {
+	wg.Wait()
 }
 
 type worker struct {
 	id    int
-	work  chan Job
-	queue chan chan Job
+	queue chan Job
 }
 
-func newWorker(id int, queue chan chan Job) *worker {
-	return &worker{
-		id:    id,
-		work:  make(chan Job),
-		queue: queue,
-	}
+func newWorker(id int, queue chan Job) *worker {
+	return &worker{id: id, queue: queue}
 }
 
 func (w *worker) start() {
 	go func() {
 		for {
-			w.queue <- w.work
-
 			select {
-			case work := <-w.work:
-				err := work()
-				if err != nil {
-					fmt.Printf("Job failed %v\n", w.id)
-				}
+			case wkr := <-w.queue:
+				wkr()
+				wg.Done()
 			}
 		}
 	}()
