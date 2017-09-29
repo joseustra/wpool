@@ -11,9 +11,8 @@ type Job func() error
 type Pool struct {
 	concurrency int
 	queue       chan Job
+	wg          sync.WaitGroup
 }
-
-var wg sync.WaitGroup
 
 // New prepares the pool and workers
 func New(n int) *Pool {
@@ -23,7 +22,7 @@ func New(n int) *Pool {
 	}
 
 	for i := 0; i < n; i++ {
-		w := newWorker(i+1, pool.queue)
+		w := newWorker(i+1, pool.queue, &pool.wg)
 		w.start()
 	}
 
@@ -32,14 +31,14 @@ func New(n int) *Pool {
 
 // Add adds a new job to the queue
 func (p *Pool) Add(j Job) error {
-	wg.Add(1)
+	p.wg.Add(1)
 	p.queue <- j
 	return nil
 }
 
 // Wait will waits for all tasks to be done before continue
 func (p *Pool) Wait() {
-	wg.Wait()
+	p.wg.Wait()
 }
 
 // Drain will drain worker pool
@@ -50,10 +49,15 @@ func (p *Pool) Drain() {
 type worker struct {
 	id    int
 	queue chan Job
+	wg    *sync.WaitGroup
 }
 
-func newWorker(id int, queue chan Job) *worker {
-	return &worker{id: id, queue: queue}
+func newWorker(id int, queue chan Job, wg *sync.WaitGroup) *worker {
+	return &worker{
+		id:    id,
+		queue: queue,
+		wg:    wg,
+	}
 }
 
 func (w *worker) start() {
@@ -66,7 +70,7 @@ func (w *worker) start() {
 					return
 				}
 				wkr()
-				wg.Done()
+				w.wg.Done()
 			}
 		}
 	}()
