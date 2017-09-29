@@ -7,7 +7,7 @@ import (
 )
 
 func TestJob(t *testing.T) {
-	wp := New(2)
+	wp := New(2, 100)
 
 	var first int
 	var last int

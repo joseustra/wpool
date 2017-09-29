@@ -14,11 +14,11 @@ type Pool struct {
 	wg          sync.WaitGroup
 }
 
-// New prepares the pool and workers
-func New(n int) *Pool {
+// New prepares the pool and workers and size of total queue
+func New(n, queueSize int) *Pool {
 	pool := &Pool{
 		concurrency: n,
-		queue:       make(chan Job, 100),
+		queue:       make(chan Job, queueSize),
 	}
 
 	for i := 0; i < n; i++ {
