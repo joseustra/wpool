@@ -1,6 +1,8 @@
 package wpool
 
-import "sync"
+import (
+	"sync"
+)
 
 // Job is the definition of the task that will be executed
 type Job func() error
@@ -40,6 +42,11 @@ func (p *Pool) Wait() {
 	wg.Wait()
 }
 
+// Drain will drain worker pool
+func (p *Pool) Drain() {
+	close(p.queue)
+}
+
 type worker struct {
 	id    int
 	queue chan Job
@@ -53,7 +60,11 @@ func (w *worker) start() {
 	go func() {
 		for {
 			select {
-			case wkr := <-w.queue:
+			case wkr, ok := <-w.queue:
+				// if ok is false, it means that queue channel is closed
+				if !ok {
+					return
+				}
 				wkr()
 				wg.Done()
 			}
