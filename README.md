@@ -51,7 +51,7 @@ import (
 )
 
 func main() {
-	wp := wpool.New(200)
+	wp := wpool.New(200, 100)
 
 	for i := 0; i < 1000; i++ {
 		a := i
