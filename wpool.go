@@ -1,6 +1,8 @@
 package wpool
 
-import "sync"
+import (
+	"sync"
+)
 
 // Job is the definition of the task that will be executed
 type Job func() error
@@ -9,19 +11,18 @@ type Job func() error
 type Pool struct {
 	concurrency int
 	queue       chan Job
+	wg          sync.WaitGroup
 }
 
-var wg sync.WaitGroup
-
-// New prepares the pool and workers
-func New(n int) *Pool {
+// New prepares the pool and workers and size of total queue
+func New(n, queueSize int) *Pool {
 	pool := &Pool{
 		concurrency: n,
-		queue:       make(chan Job, 100),
+		queue:       make(chan Job, queueSize),
 	}
 
 	for i := 0; i < n; i++ {
-		w := newWorker(i+1, pool.queue)
+		w := newWorker(i+1, pool.queue, &pool.wg)
 		w.start()
 	}
 
@@ -30,32 +31,46 @@ func New(n int) *Pool {
 
 // Add adds a new job to the queue
 func (p *Pool) Add(j Job) error {
-	wg.Add(1)
+	p.wg.Add(1)
 	p.queue <- j
 	return nil
 }
 
 // Wait will waits for all tasks to be done before continue
 func (p *Pool) Wait() {
-	wg.Wait()
+	p.wg.Wait()
+}
+
+// Drain will drain worker pool
+func (p *Pool) Drain() {
+	close(p.queue)
 }
 
 type worker struct {
 	id    int
 	queue chan Job
+	wg    *sync.WaitGroup
 }
 
-func newWorker(id int, queue chan Job) *worker {
-	return &worker{id: id, queue: queue}
+func newWorker(id int, queue chan Job, wg *sync.WaitGroup) *worker {
+	return &worker{
+		id:    id,
+		queue: queue,
+		wg:    wg,
+	}
 }
 
 func (w *worker) start() {
 	go func() {
 		for {
 			select {
-			case wkr := <-w.queue:
+			case wkr, ok := <-w.queue:
+				// if ok is false, it means that queue channel is closed
+				if !ok {
+					return
+				}
 				wkr()
-				wg.Done()
+				w.wg.Done()
 			}
 		}
 	}()
