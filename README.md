@@ -19,16 +19,20 @@ go get -u github.com/ustrajunior/wpool
 You have to start the pool and choose how many workers you want.
 
 ```go
-wp := wpool.New(200)
+wp := wpool.New(200, 200)
 ```
 
-The pool accepts functions with this signature: **func() error**. To add a new task to the pool, you can use the Add function like this
+The pool accepts functions with this signature: **func() error**. To add a new task to the pool, you can use the Add function and add a wpool.Job like this:
 
 ```go
-wp.Add(func() error {
+fn := func() error {
 	// same expensive task
-})
+}
+
+wp.Add(wpool.Job{Task: fn, Retry: 5})
 ```
+
+When an error occurs in the Task, wpool will try to execute again until the limit determined in Retry option.
 
 Now, we need to wait for all tasks to finish, so:
 
@@ -53,13 +57,13 @@ import (
 func main() {
 	wp := wpool.New(200, 100)
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10; i++ {
 		a := i
-		wp.Add(func() error {
-			time.Sleep(100 * time.Millisecond)
+		wp.Add(wpool.Job{Retry: 5, Task: func() error {
+			time.Sleep(200 * time.Millisecond)
 			fmt.Printf("Running task:  %v\n", a+1)
 			return nil
-		})
+		}})
 	}
 	
 	wp.Wait()
