@@ -4,8 +4,12 @@ import (
 	"sync"
 )
 
-// Job is the definition of the task that will be executed
-type Job func() error
+// Job defines the task to be executed and how many times it will retry
+// on fail
+type Job struct {
+	Task  func() error
+	Retry int
+}
 
 // Pool defines the pool
 type Pool struct {
@@ -22,7 +26,7 @@ func New(n, queueSize int) *Pool {
 	}
 
 	for i := 0; i < n; i++ {
-		w := newWorker(i+1, pool.queue, &pool.wg)
+		w := newWorker(i+1, pool, &pool.wg)
 		w.start()
 	}
 
@@ -30,10 +34,9 @@ func New(n, queueSize int) *Pool {
 }
 
 // Add adds a new job to the queue
-func (p *Pool) Add(j Job) error {
+func (p *Pool) Add(j Job) {
 	p.wg.Add(1)
 	p.queue <- j
-	return nil
 }
 
 // Wait will waits for all tasks to be done before continue
@@ -47,16 +50,16 @@ func (p *Pool) Drain() {
 }
 
 type worker struct {
-	id    int
-	queue chan Job
-	wg    *sync.WaitGroup
+	id   int
+	pool *Pool
+	wg   *sync.WaitGroup
 }
 
-func newWorker(id int, queue chan Job, wg *sync.WaitGroup) *worker {
+func newWorker(id int, pool *Pool, wg *sync.WaitGroup) *worker {
 	return &worker{
-		id:    id,
-		queue: queue,
-		wg:    wg,
+		id:   id,
+		pool: pool,
+		wg:   wg,
 	}
 }
 
@@ -64,12 +67,18 @@ func (w *worker) start() {
 	go func() {
 		for {
 			select {
-			case wkr, ok := <-w.queue:
+			case j, ok := <-w.pool.queue:
 				// if ok is false, it means that queue channel is closed
 				if !ok {
 					return
 				}
-				wkr()
+				if j.Retry >= 0 {
+					err := j.Task()
+					if err != nil {
+						j.Retry--
+						w.pool.Add(j)
+					}
+				}
 				w.wg.Done()
 			}
 		}
