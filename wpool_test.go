@@ -2,6 +2,7 @@ package wpool_test
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,6 +32,34 @@ func TestJob(t *testing.T) {
 
 	assert.Equal(t, 10, first)
 	assert.Equal(t, 100, last)
+}
+
+func TestJobSomeVar(t *testing.T) {
+	wp := wpool.New(2, 100)
+
+	var counter int
+	var mu sync.Mutex
+
+	fn1 := func() error {
+		mu.Lock()
+		counter++
+		mu.Unlock()
+		return nil
+	}
+
+	fn2 := func() error {
+		mu.Lock()
+		counter++
+		mu.Unlock()
+		return nil
+	}
+
+	wp.Add(wpool.Job{Task: fn1, Retry: 0})
+	wp.Add(wpool.Job{Task: fn2, Retry: 0})
+
+	wp.Wait()
+
+	assert.Equal(t, 2, counter)
 }
 
 func TestRetry(t *testing.T) {
