@@ -70,6 +70,8 @@ func main() {
 }
 ```
 
+You still need to think about race conditions. If your task access or modify the same variable, you can have a problem.
+
 ## License
 
 Copyright (c) 2017-present [José Carlos Ustra Júnior](https://github.com/ustrajunior)
